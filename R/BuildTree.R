@@ -17,12 +17,13 @@
 #' @param store.impurity if TRUE then the reduction in Gini impurity is stored for every split. This is required to run FeatureImportance() (store.impurity=FALSE)
 #' @param progress if true a pipe is printed after each tree is created.  This is useful for large datasets. (progress=FALSE)
 #' @param rotate if TRUE then the data matrix X is uniformly randomly rotated. (rotate=FALSE)
+#' @param supervised a probability. if > 0 then w/ probability "supervised",  the projection onto the difference in class-conditional means is evaluated at a split node  (supervised=0)
 #'
 #' @return Tree
 #'
 
 BuildTree <-
-    function(X, Y, min.parent, max.depth, bagging, replacement, stratify, class.ind, class.ct, fun, mat.options, store.oob, store.impurity, progress, rotate){
+    function(X, Y, min.parent, max.depth, bagging, replacement, stratify, class.ind, class.ct, fun, mat.options, store.oob, store.impurity, progress, rotate, supervised){
         #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         # rfr builds a randomer classification forest structure made up of a list
         # of trees.  This forest is randomer because each node is rotated before 
@@ -125,7 +126,8 @@ BuildTree <-
 
         if (mat.options[[3]] != "frc" && 
             mat.options[[3]] != "continuous" && 
-            mat.options[[3]] != "frcn") {
+            mat.options[[3]] != "frcn" &&
+            supervised > 0) {
             matAstore <- integer(matAsize)
         } else {
             matAstore <- double(matAsize)
@@ -256,6 +258,76 @@ BuildTree <-
 
                 nz.idx <- nz.idx + feature.nnz
             }
+            
+            if (supervised > 0) {
+              if (runif(1L) < supervised) {
+                if (sum(ClassCounts != 0L) > 2L) {
+                  class.majority <- order(ClassCounts, decreasing = T)[1L]
+                  proj <- apply(X[Assigned2Node[[CurrentNode]], , drop = F][Y[Assigned2Node[[CurrentNode]]] == class.majority, , drop = F], 2L, mean) -
+                    apply(X[Assigned2Node[[CurrentNode]], , drop = F][Y[Assigned2Node[[CurrentNode]]] != class.majority, , drop = F], 2L, mean)
+                } else {
+                  is.populated <- which(ClassCounts != 0L)
+                  proj <- apply(X[Assigned2Node[[CurrentNode]], , drop = F][Y[Assigned2Node[[CurrentNode]]] == is.populated[1L], , drop = F], 2L, mean) -
+                    apply(X[Assigned2Node[[CurrentNode]], , drop = F][Y[Assigned2Node[[CurrentNode]]] == is.populated[2L], , drop = F], 2L, mean)
+                }
+                Xnode[1L:NdSize] <- X[Assigned2Node[[CurrentNode]], , drop=FALSE]%*%proj
+                
+                #Sort the projection, Xnode, and rearrange Y accordingly
+                SortIdx[1:NdSize] <- order(Xnode[1L:NdSize])
+                x[1L:NdSize] <- Xnode[SortIdx[1L:NdSize]]
+                y[1L:NdSize] <- Y[Assigned2Node[[CurrentNode]]][SortIdx[1:NdSize]] 
+                
+                # evaluate the mean difference projection
+                ret2 <- findSplit(x = x[1:NdSize], 
+                                   y = y[1:NdSize], 
+                                   ndSize = NdSize, 
+                                   I = I,
+                                   maxdI = ret$MaxDeltaI, 
+                                   bv = ret$BestVar, 
+                                   bs = ret$BestSplit, 
+                                   nzidx = nz.idx, 
+                                   cc = ClassCounts)
+                if (ret2$MaxDeltaI > ret$MaxDeltaI) {
+                  # find which child node each sample will go to and move
+                  # them accordingly
+                  MoveLeft <- Xnode[1L:NdSize]  <= ret2$BestSplit
+                  
+                  # Move samples left or right based on split
+                  Assigned2Node[[NextUnusedNode]] <- Assigned2Node[[CurrentNode]][MoveLeft]
+                  Assigned2Node[[NextUnusedNode+1L]] <- Assigned2Node[[CurrentNode]][!MoveLeft]
+                  
+                  # store tree map data (positive value means this is an internal node)
+                  treeMap[CurrentNode] <- currIN <- currIN + 1L
+                  NDepth[NextUnusedNode]=NDepth[CurrentNode]+1L
+                  NDepth[NextUnusedNode+1L]=NDepth[CurrentNode]+1L
+                  # Pop the current node off the node stack
+                  # this allows for a breadth first traversal
+                  NodeStack <- NodeStack[-1L]
+                  # Push two nodes onto the stack
+                  NodeStack <- c(NextUnusedNode, NextUnusedNode+1L, NodeStack)
+                  NextUnusedNode <- NextUnusedNode + 2L
+                  # Store the projection matrix for the best split
+                  currMatAlength <- 2*p
+                  if(matAindex[currIN] + currMatAlength > matAsize){ #grow the vector when needed.
+                    matAsize <- matAsize*2L
+                    matAstore[matAsize] <- 0
+                  }
+                  matAstore[(matAindex[currIN]+1L):(matAindex[currIN]+currMatAlength)] <- rbind(1:p, proj)
+                  matAindex[currIN+1L] <- matAindex[currIN]+currMatAlength 
+                  CutPoint[currIN] <- ret2$BestSplit # store best cutpoint for this node
+                  if (store.impurity) {
+                    delta.impurity[currIN] <- ret2$MaxDeltaI # store decrease in impurity for this node
+                  }
+                  
+                  Assigned2Node[[CurrentNode]]<-NA #remove saved indexes
+                  CurrentNode <- NodeStack[1L]
+                  if(is.na(CurrentNode)){
+                    break
+                  }
+                  next
+                }
+              }
+            }
 
             # check to see if a valid split was found.
             if (ret$MaxDeltaI == 0) {
@@ -305,11 +377,19 @@ BuildTree <-
             currMatAlength <- length(sparseM[lrows,c(1L,3L)])
             if(matAindex[currIN] + currMatAlength > matAsize){ #grow the vector when needed.
                 matAsize <- matAsize*2L
-                matAstore[matAsize] <- 0L
+                if (mat.options[[3L]] != "frc" && 
+                    mat.options[[3L]] != "continuous" && 
+                    mat.options[[3]] != "frcn" &&
+                    supervised > 0) {
+                  matAstore[matAsize] <- 0L
+                } else {
+                  matAstore[matAsize] <- 0
+                }
             }
             if (mat.options[[3L]] != "frc" && 
                 mat.options[[3L]] != "continuous" && 
-                mat.options[[3]] != "frcn") {
+                mat.options[[3]] != "frcn" &&
+                supervised > 0) {
                 matAstore[(matAindex[currIN]+1L):(matAindex[currIN]+currMatAlength)] <- as.integer(t(sparseM[lrows,c(1L,3L)]))
             } else {
                 matAstore[(matAindex[currIN]+1L):(matAindex[currIN]+currMatAlength)] <- t(sparseM[lrows,c(1L,3L)])

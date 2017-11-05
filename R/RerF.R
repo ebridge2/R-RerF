@@ -20,6 +20,7 @@
 #' @param num.cores the number of cores to use while training. If num.cores=0 then 1 less than the number of cores reported by the OS are used. (num.cores=0)
 #' @param seed the seed to use for training the forest. (seed=1)
 #' @param cat.map a list specifying which columns in X correspond to the same one-of-K encoded feature. Each element of cat.map is a numeric vector specifying the K column indices of X corresponding to the same categorical feature after one-of-K encoding. All one-of-K encoded features in X must come after the numeric features. The K encoded columns corresponding to the same categorical feature must be placed contiguously within X. The reason for specifying cat.map is to adjust for the fact that one-of-K encoding cateogorical features results in a dilution of numeric features, since a single categorical feature is expanded to K binary features. If cat.map = NULL, then RerF assumes all features are numeric (i.e. none of the features have been one-of-K encoded).
+#' @param supervised a probability. if > 0 then w/ probability "supervised",  the projection onto the difference in class-conditional means is evaluated at a split node  (supervised=0)
 #'
 #' @return forest
 #'
@@ -71,7 +72,7 @@ RerF <-
              rank.transform = FALSE, store.oob = FALSE, 
              store.impurity = FALSE, progress = FALSE, 
              rotate = F, num.cores = 0L, 
-             seed = 1L, cat.map = NULL){
+             seed = 1L, cat.map = NULL, supervised = 0){
 
         forest <- list(trees = NULL, labels = NULL, params = NULL)
 
@@ -115,7 +116,7 @@ RerF <-
             Cindex<-NULL
         }
 
-        mcrun<- function(...) BuildTree(X, Y, min.parent, max.depth, bagging, replacement, stratify, Cindex, classCt, fun, mat.options, store.oob=store.oob, store.impurity=store.impurity, progress=progress, rotate)
+        mcrun<- function(...) BuildTree(X, Y, min.parent, max.depth, bagging, replacement, stratify, Cindex, classCt, fun, mat.options, store.oob=store.oob, store.impurity=store.impurity, progress=progress, rotate=rotate, supervised=supervised)
 
         forest$params <- list(min.parent = min.parent, 
                               max.depth = max.depth, 
@@ -128,7 +129,8 @@ RerF <-
                               store.oob = store.oob, 
                               store.impurity = store.impurity,
                               rotate = rotate, 
-                              seed = seed)
+                              seed = seed,
+                              supervised = supervised)
 
         if (num.cores!=1L){
             RNGkind("L'Ecuyer-CMRG")
