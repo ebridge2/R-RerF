@@ -190,7 +190,13 @@ BuildTree <-
         while (CurrentNode < NextUnusedNode) {
             NdSize <- length(Assigned2Node[[CurrentNode]]) #determine node size
             # determine class proportions in the node
+# Only look at first column of Y if using "rf" (added in v1.1) to excelerate rf
+        if(mat.options[[3]] == "rf"){
+            ClassCounts <- tabulate(Y[,1][Assigned2Node[[CurrentNode]]], nClasses)
+        } else{
+            # prior to 1.1 this was the only calc for ClassCounts
             ClassCounts <- tabulate(Y[Assigned2Node[[CurrentNode]]], nClasses)
+        }
             ClProb <- ClassCounts/NdSize
             # compute impurity for current node
             I <- sum(ClassCounts*(1 - ClProb))
@@ -232,13 +238,16 @@ BuildTree <-
                 lrows <- nz.idx:(nz.idx + feature.nnz - 1L)
 
                 #Project input into new space
-                Xnode[1L:NdSize] <- X[Assigned2Node[[CurrentNode]],sparseM[lrows,1L], drop=FALSE]%*%sparseM[lrows,3L, drop=FALSE]
-
-                #Sort the projection, Xnode, and rearrange Y accordingly
-                SortIdx[1:NdSize] <- order(Xnode[1L:NdSize])
-                x[1L:NdSize] <- Xnode[SortIdx[1L:NdSize]]
-                y[1L:NdSize] <- Y[Assigned2Node[[CurrentNode]]][SortIdx[1:NdSize]]
-
+                if(mat.options[[3]] == "rf"){
+                    x[1L:NdSize] <- X[Y[,sparseM[lrows, 1L]+1][Assigned2Node[[CurrentNode]]],sparseM[lrows,1L]]
+                    y[1L:NdSize] <- Y[Y[,sparseM[lrows, 1L]+1][Assigned2Node[[CurrentNode]]],1]
+                } else{
+                    Xnode[1L:NdSize] <- X[Assigned2Node[[CurrentNode]],sparseM[lrows,1L], drop=FALSE]%*%sparseM[lrows,3L, drop=FALSE]
+                    #Sort the projection, Xnode, and rearrange Y accordingly
+                    SortIdx[1:NdSize] <- order(Xnode[1L:NdSize])
+                    x[1L:NdSize] <- Xnode[SortIdx[1L:NdSize]]
+                    y[1L:NdSize] <- Y[Assigned2Node[[CurrentNode]]][SortIdx[1:NdSize]]
+                }
                 ##################################################################
                 #                    Find Best Split
                 ##################################################################
@@ -281,8 +290,11 @@ BuildTree <-
                 }
             }
             lrows <- ret$BestVar:(ret$BestVar + feature.nnz - 1L)
+if(mat.options[[3]] == "rf"){
+                    Xnode[1L:NdSize] <- X[Y[,sparseM[lrows, 1L]+1][Assigned2Node[[CurrentNode]]],sparseM[lrows,1L]]
+                } else{
             Xnode[1:NdSize]<-X[Assigned2Node[[CurrentNode]],sparseM[lrows,1L], drop=FALSE]%*%sparseM[lrows,3L, drop=FALSE]
-
+}
             # find which child node each sample will go to and move
             # them accordingly
             MoveLeft <- Xnode[1L:NdSize]  <= ret$BestSplit

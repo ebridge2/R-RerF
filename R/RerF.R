@@ -114,6 +114,12 @@ RerF <-
         }else{
             Cindex<-NULL
         }
+        # Sort X here if random.matrix = "rf" (added in v1.1)
+        # Then order Y accordingly.
+        if(mat.options[[3]] == "rf"){
+            Y <- cbind(Y, apply(X, 2, order, decreasing = F))
+        }
+        #############################################################
 
         mcrun<- function(...) BuildTree(X, Y, min.parent, max.depth, bagging, replacement, stratify, Cindex, classCt, fun, mat.options, store.oob=store.oob, store.impurity=store.impurity, progress=progress, rotate)
 
