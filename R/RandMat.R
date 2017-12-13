@@ -99,7 +99,8 @@ function(mat.options) {
       nz.cols[start.idx:end.idx] <- i
       start.idx <- end.idx + 1L
     }
-    random.matrix <- cbind(nz.rows, nz.cols, sample(c(-1L,1L), nnz, replace = T))
+    # random.matrix <- cbind(nz.rows, nz.cols, sample(c(-1L,1L), nnz, replace = T))
+    random.matrix <- cbind(nz.rows, nz.cols, rep(1L, nnz))
   }
   return(random.matrix)
 }
