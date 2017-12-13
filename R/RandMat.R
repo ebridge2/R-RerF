@@ -79,6 +79,27 @@ function(mat.options) {
       start.idx <- end.idx + 1L
     }
     random.matrix <- cbind(nz.rows, nz.cols, zrnorm(nnz))
+  } else if (method == "image-patch") {
+    iw <- mat.options[[4L]] # image width
+    ih <- mat.options[[5L]] # image height
+    pw.min <- mat.options[[6L]] # minimum patch width
+    pw.max <- mat.options[[7L]] # maximum patch width
+    pw <- sample.int(pw.max - pw.min + 1L, d, replace = T) + pw.min - 1L
+    sample.height <- ih - pw + 1L
+    sample.width <- iw - pw + 1L
+    nnz <- sum(pw^2)
+    nz.rows <- integer(nnz)
+    nz.cols <- integer(nnz)
+    start.idx <- 1L
+    for (i in seq.int(d)) {
+      top.left <- sample.int(sample.height[i]*sample.width[i], 1L)
+      top.left <- floor((top.left - 1L)/sample.height[i]) + top.left
+      end.idx <- start.idx + pw[i]^2 - 1L
+      nz.rows[start.idx:end.idx] <- sapply((1:pw[i]) - 1L, function(x) top.left:(top.left + pw[i] - 1L) + x*ih)
+      nz.cols[start.idx:end.idx] <- i
+      start.idx <- end.idx + 1L
+    }
+    random.matrix <- cbind(nz.rows, nz.cols, sample(c(-1L,1L), nnz, replace = T))
   }
   return(random.matrix)
 }
