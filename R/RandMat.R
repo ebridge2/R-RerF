@@ -84,18 +84,19 @@ function(mat.options) {
     ih <- mat.options[[5L]] # image height
     pw.min <- mat.options[[6L]] # minimum patch width
     pw.max <- mat.options[[7L]] # maximum patch width
-    pw <- sample.int(pw.max - pw.min + 1L, d, replace = T) + pw.min - 1L
-    sample.height <- ih - pw + 1L
-    sample.width <- iw - pw + 1L
-    nnz <- sum(pw^2)
+    pw <- sample.int(pw.max - pw.min + 1L, 2*d, replace = T) + pw.min - 1L
+    sample.height <- ih - pw[1:d] + 1L
+    sample.width <- iw - pw[(d + 1L):(2*d)] + 1L
+    nnz <- sum(pw[1:d]*pw[(d + 1L):(2*d)])
     nz.rows <- integer(nnz)
     nz.cols <- integer(nnz)
     start.idx <- 1L
     for (i in seq.int(d)) {
       top.left <- sample.int(sample.height[i]*sample.width[i], 1L)
-      top.left <- floor((top.left - 1L)/sample.height[i]) + top.left
-      end.idx <- start.idx + pw[i]^2 - 1L
-      nz.rows[start.idx:end.idx] <- sapply((1:pw[i]) - 1L, function(x) top.left:(top.left + pw[i] - 1L) + x*ih)
+      top.left <- floor((top.left - 1L)/sample.height[i])*(ih - sample.height[i]) + top.left
+      # top.left <- floor((top.left - 1L)/sample.height[i]) + top.left
+      end.idx <- start.idx + pw[i]*pw[i + d] - 1L
+      nz.rows[start.idx:end.idx] <- sapply((1:pw[i + d]) - 1L, function(x) top.left:(top.left + pw[i] - 1L) + x*ih)
       nz.cols[start.idx:end.idx] <- i
       start.idx <- end.idx + 1L
     }
